@@ -4,12 +4,12 @@ on:
   push:
     branches: [ main, master ]
     paths:
-      - 'Tools/JPGTool/**'
+      - 'source/**'
       - '.github/workflows/jpgtool.yml'
   pull_request:
     branches: [ main, master ]
     paths:
-      - 'Tools/JPGTool/**'
+      - 'source/**'
       - '.github/workflows/jpgtool.yml'
   workflow_dispatch:
 
@@ -45,9 +45,9 @@ jobs:
     env:
       QT_VERSION: ${{ matrix.qt-version }}
       QT_ARCH: ${{ matrix.qt-arch }}
-      SOURCE_DIR: 'Tools/JPGTool/source'
-      BUILD_DIR: 'Tools/JPGTool/build'
-      OUTPUT_DIR: 'Tools/JPGTool/dist'
+      SOURCE_DIR: 'source'
+      BUILD_DIR: 'build'
+      OUTPUT_DIR: 'dist'
 
     steps:
       - name: Checkout
