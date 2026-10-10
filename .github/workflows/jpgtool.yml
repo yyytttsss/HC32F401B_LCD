@@ -21,12 +21,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: windows-latest
-            qt-version: '5.15.2'
-            qt-arch: 'win64_mingw81'
-            qt-tools: 'tools_mingw81 tools_cmake tools_ninja'
-            artifact-name: 'JPGTool-Windows'
-            exe-name: 'jpg_tool.exe'
+          # - os: windows-latest
+          #   qt-version: '5.15.2'
+          #   qt-arch: 'win64_mingw81'
+          #   qt-tools: 'tools_mingw81 tools_cmake tools_ninja'
+          #   artifact-name: 'JPGTool-Windows'
+          #   exe-name: 'jpg_tool.exe'
 
           - os: macos-13
             qt-version: '5.15.2'
@@ -35,12 +35,12 @@ jobs:
             artifact-name: 'JPGTool-macOS'
             exe-name: 'jpg_tool.app'
 
-          - os: ubuntu-20.04
-            qt-version: '5.15.2'
-            qt-arch: 'gcc_64'
-            qt-tools: 'tools_ninja'
-            artifact-name: 'JPGTool-Linux'
-            exe-name: 'jpg_tool'
+          # - os: ubuntu-20.04
+          #   qt-version: '5.15.2'
+          #   qt-arch: 'gcc_64'
+          #   qt-tools: 'tools_ninja'
+          #   artifact-name: 'JPGTool-Linux'
+          #   exe-name: 'jpg_tool'
 
     env:
       QT_VERSION: ${{ matrix.qt-version }}
