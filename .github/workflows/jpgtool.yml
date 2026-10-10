@@ -1,0 +1,193 @@
+name: Build JPGTool
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'Tools/JPGTool/**'
+      - '.github/workflows/jpgtool.yml'
+  pull_request:
+    branches: [ main, master ]
+    paths:
+      - 'Tools/JPGTool/**'
+      - '.github/workflows/jpgtool.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            qt-version: '5.15.2'
+            qt-arch: 'win64_mingw81'
+            qt-tools: 'tools_mingw81 tools_cmake tools_ninja'
+            artifact-name: 'JPGTool-Windows'
+            exe-name: 'jpg_tool.exe'
+
+          - os: macos-13
+            qt-version: '5.15.2'
+            qt-arch: 'clang_64'
+            qt-tools: 'tools_ninja'
+            artifact-name: 'JPGTool-macOS'
+            exe-name: 'jpg_tool.app'
+
+          - os: ubuntu-20.04
+            qt-version: '5.15.2'
+            qt-arch: 'gcc_64'
+            qt-tools: 'tools_ninja'
+            artifact-name: 'JPGTool-Linux'
+            exe-name: 'jpg_tool'
+
+    env:
+      QT_VERSION: ${{ matrix.qt-version }}
+      QT_ARCH: ${{ matrix.qt-arch }}
+      SOURCE_DIR: 'Tools/JPGTool/source'
+      BUILD_DIR: 'Tools/JPGTool/build'
+      OUTPUT_DIR: 'Tools/JPGTool/dist'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install aqtinstall
+        run: pip install aqtinstall
+
+      - name: Install Qt (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          python -m aqt install-qt windows desktop ${{ matrix.qt-version }} ${{ matrix.qt-arch }} -O C:/Qt
+          python -m aqt install-tool windows desktop tools_mingw81 -O C:/Qt
+          python -m aqt install-tool windows desktop tools_cmake -O C:/Qt
+          python -m aqt install-tool windows desktop tools_ninja -O C:/Qt
+          echo "CMAKE_PREFIX_PATH=C:/Qt/${{ matrix.qt-version }}/${{ matrix.qt-arch }}" >> $env:GITHUB_ENV
+          echo "C:/Qt/${{ matrix.qt-version }}/${{ matrix.qt-arch }}/bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+          echo "C:/Qt/Tools/mingw810_64/bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+          echo "C:/Qt/Tools/CMake_64/bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+          echo "C:/Qt/Tools/Ninja" | Out-File -FilePath $env:GITHUB_PATH -Append
+
+      - name: Install Qt (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          python -m aqt install-qt mac desktop ${{ matrix.qt-version }} ${{ matrix.qt-arch }} -O ~/Qt
+          python -m aqt install-tool mac desktop tools_ninja -O ~/Qt
+          echo "CMAKE_PREFIX_PATH=$HOME/Qt/${{ matrix.qt-version }}/${{ matrix.qt-arch }}" >> $GITHUB_ENV
+          echo "$HOME/Qt/${{ matrix.qt-version }}/${{ matrix.qt-arch }}/bin" >> $GITHUB_PATH
+          echo "$HOME/Qt/Tools/Ninja" >> $GITHUB_PATH
+
+      - name: Install Qt (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgl1-mesa-dev libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 \
+            libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-xinerama0 \
+            libxcb-shape0 libxcb-cursor0 libfontconfig1 libdbus-1-3
+          python -m aqt install-qt linux desktop ${{ matrix.qt-version }} ${{ matrix.qt-arch }} -O ~/Qt
+          python -m aqt install-tool linux desktop tools_ninja -O ~/Qt
+          echo "CMAKE_PREFIX_PATH=$HOME/Qt/${{ matrix.qt-version }}/${{ matrix.qt-arch }}" >> $GITHUB_ENV
+          echo "$HOME/Qt/${{ matrix.qt-version }}/${{ matrix.qt-arch }}/bin" >> $GITHUB_PATH
+          echo "$HOME/Qt/Tools/Ninja" >> $GITHUB_PATH
+
+      - name: Install CMake (macOS / Linux)
+        if: runner.os != 'Windows'
+        uses: lukka/get-cmake@latest
+
+      - name: Configure with CMake (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cmake -S ${{ env.SOURCE_DIR }} -B ${{ env.BUILD_DIR }} -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_PREFIX_PATH="${{ env.CMAKE_PREFIX_PATH }}"
+
+      - name: Configure with CMake (macOS / Linux)
+        if: runner.os != 'Windows'
+        run: |
+          cmake -S ${{ env.SOURCE_DIR }} -B ${{ env.BUILD_DIR }} -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="${{ env.CMAKE_PREFIX_PATH }}"
+
+      - name: Build
+        run: cmake --build ${{ env.BUILD_DIR }} --config Release --parallel 4
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          New-Item -ItemType Directory -Force -Path ${{ env.OUTPUT_DIR }} | Out-Null
+          Copy-Item "${{ env.BUILD_DIR }}/jpg_tool.exe" "${{ env.OUTPUT_DIR }}/JPGTool.exe"
+          & "C:/Qt/${{ matrix.qt-version }}/${{ matrix.qt-arch }}/bin/windeployqt.exe" `
+            --no-translations --no-system-d3d-compiler --no-opengl-sw `
+            "${{ env.OUTPUT_DIR }}/JPGTool.exe"
+          # Copy MinGW runtime DLLs (windeployqt misses these)
+          Copy-Item "C:/Qt/Tools/mingw810_64/bin/libgcc_s_seh-1.dll" "${{ env.OUTPUT_DIR }}/"
+          Copy-Item "C:/Qt/Tools/mingw810_64/bin/libstdc++-6.dll" "${{ env.OUTPUT_DIR }}/"
+          Copy-Item "C:/Qt/Tools/mingw810_64/bin/libwinpthread-1.dll" "${{ env.OUTPUT_DIR }}/"
+          Compress-Archive -Path "${{ env.OUTPUT_DIR }}/*" `
+            -DestinationPath "${{ matrix.artifact-name }}.zip" `
+            -CompressionLevel Optimal
+
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p ${{ env.OUTPUT_DIR }}
+          cp -R "${{ env.BUILD_DIR }}/jpg_tool.app" "${{ env.OUTPUT_DIR }}/JPGTool.app"
+          "$HOME/Qt/${{ matrix.qt-version }}/${{ matrix.qt-arch }}/bin/macdeployqt" \
+            "${{ env.OUTPUT_DIR }}/JPGTool.app" -no-strip
+          # Create DMG
+          hdiutil create -volname "JPGTool" \
+            -srcfolder "${{ env.OUTPUT_DIR }}/JPGTool.app" \
+            -ov -format UDZO "${{ matrix.artifact-name }}.dmg"
+          # Also create a zip
+          cd "${{ env.OUTPUT_DIR }}"
+          zip -r "../${{ matrix.artifact-name }}.zip" "JPGTool.app"
+          cd ..
+
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p ${{ env.OUTPUT_DIR }}/lib
+          cp "${{ env.BUILD_DIR }}/jpg_tool" "${{ env.OUTPUT_DIR }}/JPGTool"
+          # Copy Qt platform plugins and libraries
+          QT_LIB_DIR="$HOME/Qt/${{ matrix.qt-version }}/${{ matrix.qt-arch }}/lib"
+          QT_PLUGIN_DIR="$HOME/Qt/${{ matrix.qt-version }}/${{ matrix.qt-arch }}/plugins"
+          mkdir -p "${{ env.OUTPUT_DIR }}/platforms"
+          cp "$QT_PLUGIN_DIR/platforms/libqxcb.so" "${{ env.OUTPUT_DIR }}/platforms/"
+          # Create startup script
+          cat > "${{ env.OUTPUT_DIR }}/JPGTool.sh" << 'EOF'
+          #!/bin/bash
+          DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+          export LD_LIBRARY_PATH="$DIR/lib:$LD_LIBRARY_PATH"
+          export QT_PLUGIN_PATH="$DIR"
+          exec "$DIR/JPGTool" "$@"
+          EOF
+          chmod +x "${{ env.OUTPUT_DIR }}/JPGTool.sh"
+          # Copy necessary Qt libs
+          for lib in Qt5Core Qt5Gui Qt5Widgets; do
+            cp "$QT_LIB_DIR/lib${lib}.so.5" "${{ env.OUTPUT_DIR }}/lib/" 2>/dev/null || true
+            cp "$QT_LIB_DIR/lib${lib}.so.5.15" "${{ env.OUTPUT_DIR }}/lib/" 2>/dev/null || true
+            cp "$QT_LIB_DIR/lib${lib}.so.5.15.2" "${{ env.OUTPUT_DIR }}/lib/" 2>/dev/null || true
+          done
+          cd "${{ env.OUTPUT_DIR }}"
+          zip -r "../${{ matrix.artifact-name }}.zip" .
+          cd ..
+
+      - name: Upload artifact (zip)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: ${{ matrix.artifact-name }}.zip
+
+      - name: Upload DMG (macOS)
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact-name }}-DMG
+          path: ${{ matrix.artifact-name }}.dmg
