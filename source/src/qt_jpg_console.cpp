@@ -927,3 +927,4 @@ int main(int argc, char* argv[]) {
 }
 
 #include "qt_jpg_console.moc"
+
